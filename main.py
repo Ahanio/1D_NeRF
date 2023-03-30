@@ -91,12 +91,12 @@ def rays_generator(x_range, objects, num_rays, num_samples_per_ray):
 
 def main():
     x_range = (0, 10)
-    objects = torch.Tensor([[3, 5]])
+    objects = torch.Tensor([[3, 5], [7, 8]])
     N_rays = 100
-    N_samples = 200
+    N_samples = 300
 
     model = VanillaNeRF()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-3)
     visualizer = Visualizer(x_range, objects, enable=True, model=model)
 
     for i in tqdm(range(5000)):
