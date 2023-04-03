@@ -81,20 +81,14 @@ class Visualizer:
             plt.show(block=block)
             plt.pause(0.05)
 
-    def save(self, path):
-        if self.enable:
-            self.fig.savefig(path)
-
-    def close(self):
-        if self.enable:
-            plt.close(self.fig)
-
     def interactive_mode(self):
-        "Run interactive plot with sliders. One slider specifies the position of the camera, other - direction of ray."
+        """Run interactive plot with sliders.
+        One slider specifies the position of the camera,
+        other - direction of ray."""
         if not self.enable:
             return
 
-        axfreq = self.fig.add_axes([0.15, 0.01, 0.75, 0.03])
+        axfreq = self.fig.add_axes([0.12, 0.01, 0.78, 0.03])
         self.freq_slider = Slider(
             ax=axfreq,
             label="Position",
@@ -131,9 +125,18 @@ class Visualizer:
             ).float()
             x, delta = shoot_one_ray(origin, direction, 300, self.x_range)
 
-            density = self.model(x.reshape(-1, 1))
+            density = self.model(x.reshape(-1, 1)).view(1, -1)
             tr = self.model.transmittance(density, delta)
             w = self.model.surface(tr, density, delta)
+            local_x = torch.abs(x - origin)
+            pred = torch.sum(w * local_x, dim=1)
+            print("Predicted depth:", pred)
+            self.plot(x, density[0], tr[0], w[0])
 
-            self.plot(x, density, tr, w)
-            # self.fig.canvas.draw_idle()
+    def save(self, path):
+        if self.enable:
+            self.fig.savefig(path)
+
+    def close(self):
+        if self.enable:
+            plt.close(self.fig)

@@ -62,8 +62,8 @@ class OccRF(VanillaNeRF):
             kern[None, None, :],
             padding="same",
         )[:, 0]
-        # conv_modified_occ[:, 0] = conv_modified_occ[:, 1]
-        # conv_modified_occ[:, -1] = conv_modified_occ[:, -2]
+        conv_modified_occ[:, 0] = conv_modified_occ[:, 1]
+        conv_modified_occ[:, -1] = conv_modified_occ[:, -2]
 
         # conv_modified_occ = modified_occ
 
@@ -82,11 +82,11 @@ def main():
     N_rays = 100
     N_samples = 300
 
-    model = OccRF()
+    model = VanillaNeRF()
     optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-2)
     visualizer = Visualizer(x_range, objects, enable=True, model=model)
 
-    for i in tqdm(range(5000)):
+    for i in tqdm(range(1000)):
         origins, x, delta, depths, first_surface = rays_generator(
             x_range, objects, N_rays, N_samples
         )
@@ -106,6 +106,7 @@ def main():
         if i % 50 == 0:
             print(f"Loss: {loss.item()}")
             print(f"First obj", pred[0].item() + origins[0].item())
+            print(f"GT first obj", first_surface[0].item())
             print(f"W sum", w[0].sum().item())
 
             visualizer.clear_plots()
