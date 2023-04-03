@@ -4,10 +4,12 @@ import matplotlib.pyplot as plt
 import torch
 from torch import nn
 from tqdm import tqdm
+from torch.nn.functional import conv1d
 
 from vis import Visualizer
 from utils import to_numpy
 from models import PEncoding
+from data import rays_generator
 
 
 class VanillaNeRF(nn.Module):
@@ -34,69 +36,54 @@ class VanillaNeRF(nn.Module):
         return transmittance * (1 - torch.exp(-density * delta))
 
 
-def rays_generator(x_range, objects, num_rays, num_samples_per_ray):
-    x = torch.linspace(x_range[0], x_range[1], num_rays * 10).float().unsqueeze(-1)
+class OccRF(VanillaNeRF):
+    def __init__(self, hidden_dim=32, num_freq=4, max_freq_log2=10):
+        super().__init__(hidden_dim, num_freq, max_freq_log2)
+        self.net = nn.Sequential(
+            nn.Linear(self.pe.out_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1),
+            nn.Sigmoid(),  # nn.Sigmoid(),
+        )
 
-    # pick random points that lay outside of objects
-    x = x[torch.randperm(x.shape[0])]
-    for ob in objects:
-        x = x[torch.logical_not(torch.logical_and(x > ob[0], x < ob[1]))]
-    x = x[:num_rays]
-    origins = x  # [n,]
-    origins[0] = 0.2  ## For visualization purposes
+    def forward(self, x):
+        t = self.pe(x)
+        out = self.net(t)  # torch.clamp(self.net(t), max=1)
+        return out
 
-    directions = torch.Tensor(np.random.choice([-1, 1], num_rays)).float()  # [n,]
-    directions[0] = 1  ## For visualization purposes
+    @staticmethod
+    def transmittance(density, delta):
+        modified_occ = torch.cumprod(1 - density * delta, dim=1)
 
-    t_max = torch.zeros_like(origins)
-    t_max[directions > 0] = x_range[1] - origins[directions > 0] + 1
-    t_max[directions < 0] = origins[directions < 0] - x_range[0] + 1
-    t_min = 0
+        kern = torch.Tensor([1, 2, 1]) / 4
+        # kern = torch.Tensor([1, 6, 15, 20, 15, 6, 1]) / 64
+        conv_modified_occ = conv1d(
+            modified_occ[:, None],
+            kern[None, None, :],
+            padding="same",
+        )[:, 0]
+        # conv_modified_occ[:, 0] = conv_modified_occ[:, 1]
+        # conv_modified_occ[:, -1] = conv_modified_occ[:, -2]
 
-    ray_points = origins.unsqueeze(-1) + directions.unsqueeze(-1) * (
-        torch.linspace(0, 1, num_samples_per_ray) * (t_max - t_min).unsqueeze(-1)
-        + t_min
-    )
+        # conv_modified_occ = modified_occ
 
-    # for each ray find the depth along that ray where it intersects with the object.
-    # If the ray does not intersect with any object, then the depth is the max depth
-    depths = []
-    bounds = torch.Tensor(objects).reshape(-1).sort()[0]
-    for i in range(num_rays):
-        cur_depth = None
-        if directions[i] > 0:
-            closest = bounds[bounds > origins[i]]
-            if len(closest) != 0:
-                cur_depth = closest.min() - origins[i]
-            else:
-                cur_depth = x_range[1] - origins[i]
-        elif directions[i] < 0:
-            closest = bounds[bounds < origins[i]]
-            if len(closest) != 0:
-                cur_depth = origins[i] - closest.max()
-            else:
-                cur_depth = origins[i] - x_range[0]
+        # torch.exp(torch.cumsum(-density * delta, dim=1))
+        return conv_modified_occ
 
-        depths.append(cur_depth)
-
-    depths = torch.Tensor(depths)
-    # return origins, directions, depths
-    gt_boundary = origins + directions * depths
-    delta = torch.abs(
-        torch.diff(ray_points, dim=1, append=ray_points[:, 0:1])
-    )  # prepend=ray_points[:,0:1]
-    # ray_points = ray_points[:, :-1]
-    return origins.unsqueeze(-1), ray_points, delta, depths, gt_boundary
+    @staticmethod
+    def surface(transmittance, density, delta):
+        # return transmittance * (1 - torch.exp(-density * delta))
+        return -torch.diff(transmittance, dim=1, append=transmittance[:, -2:-1])
 
 
 def main():
     x_range = (0, 10)
-    objects = torch.Tensor([[3, 5], [7, 8]])
+    objects = torch.Tensor([[3, 5]])  # , [8, 9]])
     N_rays = 100
     N_samples = 300
 
-    model = VanillaNeRF()
-    optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-3)
+    model = OccRF()
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-2)
     visualizer = Visualizer(x_range, objects, enable=True, model=model)
 
     for i in tqdm(range(5000)):
@@ -126,7 +113,7 @@ def main():
             visualizer.plot(x[ray_id], density[ray_id], tr[ray_id], w[ray_id])
             visualizer.show()
 
-    visualizer.show(block=True)
+    visualizer.show(block=True, interactive=True)
 
 
 if __name__ == "__main__":

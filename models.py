@@ -46,3 +46,4 @@ class PEncoding(nn.Module):
         if self.include_input:
             encoded = torch.cat([coords, encoded], dim=-1)
         return encoded
+
