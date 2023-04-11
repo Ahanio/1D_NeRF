@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from matplotlib.widgets import Slider, Button, RadioButtons
+from matplotlib.widgets import Button, RadioButtons, Slider
+
 from data import shoot_one_ray
 
 
@@ -25,6 +26,10 @@ class Visualizer:
         self,
     ):
         self.fig, self.ax = plt.subplots(3, 1, sharex=True, figsize=(10, 8))
+        plt.setp(
+            self.ax,
+            xticks=np.arange(*self.x_range, step=1),
+        )
 
         self.ax[0].set_title("Density")
         self.ax[0].set_xlim(self.x_range)
@@ -57,6 +62,8 @@ class Visualizer:
                         :, None
                     ]
                     full_density = self.model(x_density)
+                    # full_density = 1 - torch.exp(-full_density)
+
                     a = self.ax[num_ax].plot(
                         to_np(x_density), to_np(full_density), "-o", **plot_params
                     )
@@ -131,6 +138,7 @@ class Visualizer:
             local_x = torch.abs(x - origin)
             pred = torch.sum(w * local_x, dim=1)
             print("Predicted depth:", pred)
+            print("W sum:", w.sum().item())
             self.plot(x, density[0], tr[0], w[0])
 
     def save(self, path):
