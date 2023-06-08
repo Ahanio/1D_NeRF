@@ -151,7 +151,8 @@ class Visualizer:
                     float(direction),
                 ]
             ).float()
-            x, delta = shoot_one_ray(origin, direction, 300, self.x_range)
+            step_size = None if self.model.name == "NeRF" else self.model.step_size
+            x, delta = shoot_one_ray(origin, direction, 300, self.x_range, step_size=step_size)
 
             geom = self.model(x.reshape(-1, 1)).view(1, -1)
             tr = self.model.transmittance(geom, delta)

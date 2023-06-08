@@ -48,9 +48,16 @@ class VanillaNeRF(nn.Module):
 
     def get_density(self, coords):
         return self.forward(coords)
+    
+    def generate_data(self, x_range, objects, N_rays, N_samples):
+        return rays_generator(
+            x_range, objects, N_rays, N_samples, non_uniform=True
+        )
 
 
 class Unisurf(nn.Module):
+    step_size = 0.01
+
     def __init__(self, hidden_dim=32, num_freq=4, max_freq_log2=10):
         super().__init__()
         self.pe = PEncoding(num_freq=num_freq, max_freq_log2=max_freq_log2)
@@ -61,7 +68,6 @@ class Unisurf(nn.Module):
         )
         self.name = "Unisurf"
         self.geom_type = "occupancy"
-        self.step_size = 0.01
 
     def forward(self, x):
         t = self.pe(x).float()
@@ -82,37 +88,35 @@ class Unisurf(nn.Module):
 
     def get_density(self, coords):
         return self.forward(coords)
+    
+    def generate_data(self, x_range, objects, N_rays, N_samples):
+        return unisurf_data_gen(
+            x_range, objects, N_rays, N_samples, step_size=self.step_size
+        )
 
 
 def main():
     global objects
 
     x_range = (0, 10)
-    objects = torch.Tensor([[3, 5], [7, 9]])
+    objects = torch.Tensor([[2, 4], [6, 8]])
     N_rays = 100
-    N_samples = 400
-    step_size = 0.01
+    N_samples = 200
+    step_size = 0.1
 
-    model = VanillaNeRF()  # Unisurf(step_size)
+    model = Unisurf()  # Unisurf(step_size) # VanillaNeRF
     optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-2)
     visualizer = Visualizer(
         x_range, objects, enable=True, model=model
     )
 
     for i in tqdm(range(2000)):
-        if model.name == "NeRF":
-            origins, x, delta, depths, first_surface = rays_generator(
-                x_range, objects, N_rays, N_samples, non_uniform=True
-            )
-
         if model.name == "Unisurf":
-            step_size = np.clip(0.1 * np.exp(-i / 1000), a_max=0.1, a_min=0.001)
-            # step_size = 0.01
-            model.step_size = step_size
-            origins, x, delta, depths, first_surface = unisurf_data_gen(
-                x_range, objects, N_rays, N_samples, step_size=step_size
-            )
-            visualizer.step_size = step_size
+            model.step_size = np.clip(0.1 * np.exp(-i / 1000), a_max=0.1, a_min=0.001)
+
+        origins, x, delta, depths, first_surface = model.generate_data(
+            x_range, objects, N_rays, N_samples
+        )
 
         geom = model(x.reshape(-1, 1)).view(N_rays, N_samples)
         tr = model.transmittance(geom, delta)
