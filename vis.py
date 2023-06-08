@@ -17,6 +17,7 @@ class Visualizer:
         self.lines = []
         self.enable = enable
         self.model = model
+        self.geom_type = model.geom_type
 
         if self.enable:
             plt.ion()
@@ -31,8 +32,9 @@ class Visualizer:
             xticks=np.arange(*self.x_range, step=1),
         )
 
-        self.ax[0].set_title("Density")
+        self.ax[0].set_title(self.geom_type)
         self.ax[0].set_xlim(self.x_range)
+        self.ax[0].set_ylim(0, 1.2)
 
         self.ax[1].set_title("Transmittance")
         self.ax[1].set_ylim(0, 1.2)
@@ -52,23 +54,41 @@ class Visualizer:
 
             # [a.legend() for a in self.ax]
 
-    def plot(self, x, density, tr, w, color="blue"):
+    def plot(self, x, density, tr, w, color="blue", full_range_density=True):
+        # full_range_density – whether to plot density for the whole range or only for the specified ray
         if self.enable:
             # plot params with smaller points size
             plot_params = {"linewidth": 1, "c": color, "markersize": 4}
+
+            # ax[0] – density/occupancy
+            # ax[1] – Transmittance
+            # ax[2] – Surface
+
             for num_ax, to_plot in enumerate([to_np(density), to_np(tr), to_np(w)]):
                 if num_ax == 0:
-                    x_density = torch.linspace(self.x_range[0], self.x_range[1], 300)[
-                        :, None
-                    ]
-                    full_density = self.model(x_density)
-                    # full_density = 1 - torch.exp(-full_density)
+                    if self.model.name == "NeRF":
+                        x_density, _ = shoot_one_ray(0, 1, 300, self.x_range)
+
+                    elif self.model.name == "Unisurf":
+                        num_samples = int(
+                            (self.x_range[1] - self.x_range[0]) / self.model.step_size
+                        )
+                        x_density = torch.arange(
+                            0, self.model.step_size * num_samples, self.model.step_size
+                        )[:, None]
+
+                    full_geom = self.model(x_density) if full_range_density else density
 
                     a = self.ax[num_ax].plot(
-                        to_np(x_density), to_np(full_density), "-o", **plot_params
+                        to_np(x_density), to_np(full_geom), "-o", **plot_params
                     )
+                    if self.geom_type == "density":
+                        self.ax[0].set_ylim(0, max(5, max(to_np(full_geom)) + 0.5))
+
                 elif num_ax == 1:
                     a = self.ax[num_ax].plot(to_np(x), to_plot, "-o", **plot_params)
+                    # a = self.ax[num_ax].plot(to_np(x_density), to_np(full_density), "-o", **plot_params, alpha=0.1)
+
                 elif num_ax == 2:
                     a = self.ax[num_ax].plot(to_np(x), to_plot, "-o", **plot_params)
                     self.ax[2].set_ylim(0, max(0.1, to_plot.max()))
@@ -132,14 +152,15 @@ class Visualizer:
             ).float()
             x, delta = shoot_one_ray(origin, direction, 300, self.x_range)
 
-            density = self.model(x.reshape(-1, 1)).view(1, -1)
-            tr = self.model.transmittance(density, delta)
-            w = self.model.surface(tr, density, delta)
+            geom = self.model(x.reshape(-1, 1)).view(1, -1)
+            tr = self.model.transmittance(geom, delta)
+            w = self.model.surface(tr, geom, delta)
             local_x = torch.abs(x - origin)
             pred = torch.sum(w * local_x, dim=1)
+
             print("Predicted depth:", pred)
             print("W sum:", w.sum().item())
-            self.plot(x, density[0], tr[0], w[0])
+            self.plot(x, geom[0], tr[0], w[0])
 
     def save(self, path):
         if self.enable:
