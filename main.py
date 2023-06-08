@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from data import rays_generator, unisurf_data_gen
-from models import PEncoding
+from utils import PEncoding
 from utils import to_numpy
 from vis import Visualizer
 
@@ -88,7 +88,7 @@ def main():
     global objects
 
     x_range = (0, 10)
-    objects = torch.Tensor([[4, 6]])  # , [6, 7]])
+    objects = torch.Tensor([[3, 5], [7, 9]])
     N_rays = 100
     N_samples = 400
     step_size = 0.01
@@ -96,7 +96,7 @@ def main():
     model = VanillaNeRF()  # Unisurf(step_size)
     optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-2)
     visualizer = Visualizer(
-        x_range, objects, enable=True, model=model, step_size=step_size
+        x_range, objects, enable=True, model=model
     )
 
     for i in tqdm(range(2000)):

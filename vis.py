@@ -39,7 +39,7 @@ class Visualizer:
         self.ax[1].set_title("Transmittance")
         self.ax[1].set_ylim(0, 1.2)
 
-        self.ax[2].set_title("Surface")
+        self.ax[2].set_title("PDF")
         self.ax[2].set_ylim(0, 0.1)
 
         for num_plot in range(3):
@@ -124,12 +124,12 @@ class Visualizer:
             valinit=0.1,
         )
 
-        rax = self.fig.add_axes([0.01, 0.03, 0.05, 0.1])
+        rax = self.fig.add_axes([0.01, 0.04, 0.04, 0.1])
         self.radio = RadioButtons(
             rax,
             (
-                "1",
-                "-1",
+                "–>",
+                "<–",
             ),
         )
 
@@ -145,9 +145,10 @@ class Visualizer:
                     self.freq_slider.val,
                 ]
             ).float()
+            direction = 1 if self.radio.value_selected == "–>" else -1
             direction = torch.tensor(
                 [
-                    float(self.radio.value_selected),
+                    float(direction),
                 ]
             ).float()
             x, delta = shoot_one_ray(origin, direction, 300, self.x_range)
